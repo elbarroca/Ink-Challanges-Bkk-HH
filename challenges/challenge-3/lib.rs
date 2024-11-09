@@ -36,7 +36,7 @@ mod dao {
         #[ink(constructor)]
         pub fn new(name: String, superdao: AccountId) -> Self {
             // Register your Dao as a member of the Superdao.
-            let mut instance = Self {
+            let instance = Self {
                 name,
                 superdao: superdao.into(),
                 voters: StorageVec::new(),
@@ -46,40 +46,81 @@ mod dao {
 
         #[ink(message)]
         pub fn get_name(&self) -> String {
-            // - Returns the name of the Dao
-            todo!()
+            self.name.clone()
         }
 
         #[ink(message)]
         pub fn register_voter(&mut self) -> Result<(), DaoError> {
-            // - Error: Throw error `DaoError::VoterAlreadyRegistered` if the voter is registered
-            // - Success: Register a new `voter` to the Dao
+            let caller = self.env().caller();
+            
+            if self.has_voter(caller) {
+                return Err(DaoError::VoterAlreadyRegistered);
+            }
+            
+            self.voters.push(&caller);
             Ok(())
         }
 
         #[ink(message)]
         pub fn deregister_voter(&mut self) -> Result<(), DaoError> {
-            // - Error: Throw error `DaoError::VoterNotRegistered` if the voter is not registered
-            // - Success: Deregister a new `voter` from the Dao
-            Ok(())
+            let caller = self.env().caller();
+            
+            if let Some(pos) = (0..self.voters.len())
+                .find(|&i| self.voters.get(i).unwrap() == caller) {
+                let len = self.voters.len();
+                if pos < len - 1 {
+                    let last = self.voters.get(len - 1).unwrap();
+                    self.voters.set(pos, &last);
+                }
+                self.voters.pop();
+                Ok(())
+            } else {
+                Err(DaoError::VoterNotRegistered)
+            }
         }
 
         #[ink(message)]
         pub fn has_voter(&self, voter: AccountId) -> bool {
-            todo!()
+            (0..self.voters.len())
+                .any(|i| self.voters.get(i).unwrap() == voter)
         }
 
         #[ink(message)]
         pub fn create_contract_call_proposal(&mut self) -> Result<(), DaoError> {
-            // - Error: Throw error `DaoError::VoterNotRegistered` if the voter is not registered
-            // - Success: Create a SuperDao proposal to call a contract method.
+            let caller = self.env().caller();
+            
+            if !self.has_voter(caller) {
+                return Err(DaoError::VoterNotRegistered);
+            }
+            
+            // Create a sample contract call
+            // Note: In a real implementation, you would want to parameterize this
+            let contract_call = ContractCall {
+                callee: caller,  // Example: calling back to the sender
+                selector: [0; 4].into(), // Example selector
+                input: vec![],  // Example empty input
+                transferred_value: 0,
+                ref_time_limit: 0,
+                allow_reentry: false,
+            };
+            
+            // Create the proposal in the Super DAO
+            self.superdao.create_proposal(Call::Contract(contract_call));
+            
             Ok(())
         }
 
         #[ink(message)]
-        pub fn vote_proposal(&mut self, proposal_id: u32, vote: bool) -> Result<(), DaoError> {
-            // - Error: Throw error `DaoError::VoterNotRegistered` if the voter is not registered
-            // - Success: Vote a SuperDao proposal.
+        pub fn vote_proposal(&mut self, proposal_id: u32, approve: bool) -> Result<(), DaoError> {
+            let caller = self.env().caller();
+            
+            if !self.has_voter(caller) {
+                return Err(DaoError::VoterNotRegistered);
+            }
+            
+            // Cast the vote in the Super DAO
+            self.superdao.vote(proposal_id, if approve { Vote::Yes } else { Vote::No });
+            
             Ok(())
         }
     }
@@ -90,12 +131,44 @@ mod dao {
 
         #[ink::test]
         fn test_create_superdao_contract_call_proposal() {
-            todo!("Challenge 3");
+            // Create a new DAO instance
+            let superdao_account = AccountId::from([0x1; 32]);
+            let mut dao = Dao::new(String::from("Test DAO"), superdao_account);
+            
+            // Register a voter
+            assert_eq!(dao.register_voter(), Ok(()));
+            
+            // Create a proposal
+            assert_eq!(dao.create_contract_call_proposal(), Ok(()));
+            
+            // Try to create a proposal with unregistered voter
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob);
+            assert_eq!(
+                dao.create_contract_call_proposal(),
+                Err(DaoError::VoterNotRegistered)
+            );
         }
 
         #[ink::test]
         fn test_vote_superdao_proposal() {
-            todo!("Challenge 3");
+            // Create a new DAO instance
+            let superdao_account = AccountId::from([0x1; 32]);
+            let mut dao = Dao::new(String::from("Test DAO"), superdao_account);
+            
+            // Register a voter
+            assert_eq!(dao.register_voter(), Ok(()));
+            
+            // Vote on a proposal
+            assert_eq!(dao.vote_proposal(1, true), Ok(()));
+            
+            // Try to vote with unregistered voter
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(accounts.bob);
+            assert_eq!(
+                dao.vote_proposal(1, true),
+                Err(DaoError::VoterNotRegistered)
+            );
         }
     }
 }

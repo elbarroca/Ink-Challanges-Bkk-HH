@@ -45,47 +45,106 @@ mod dao {
 
         #[ink(message)]
         pub fn get_name(&self) -> String {
-            // - Returns the name of the Dao
-            todo!()
+            self.name.clone()
         }
 
         #[ink(message)]
         pub fn register_voter(&mut self) -> Result<(), DaoError> {
-            // - Error: Throw error `DaoError::VoterAlreadyRegistered` if the voter is registered
-            // - Success: Register a new `voter` to the Dao
+            let caller = self.env().caller();
+            
+            // Check if voter is already registered
+            if self.has_voter(caller) {
+                return Err(DaoError::VoterAlreadyRegistered);
+            }
+
+            // Register the new voter
+            self.voters.push(caller);
             Ok(())
         }
 
         #[ink(message)]
         pub fn deregister_voter(&mut self) -> Result<(), DaoError> {
-            // - Error: Throw error `DaoError::VoterNotRegistered` if the voter is not registered
-            // - Success: Deregister a new `voter` from the Dao
+            let caller = self.env().caller();
+            
+            // Find voter index
+            let voter_index = self.voters
+                .iter()
+                .position(|v| *v == caller)
+                .ok_or(DaoError::VoterNotRegistered)?;
+
+            // Remove voter
+            self.voters.swap_remove(voter_index);
             Ok(())
         }
 
         #[ink(message)]
         pub fn has_voter(&self, voter: AccountId) -> bool {
-            todo!();
+            self.voters.iter().any(|v| *v == voter)
         }
 
         #[ink(message)]
         pub fn create_superdao_cross_chain_proposal(&mut self) -> Result<(), DaoError> {
-            // - Error: Throw error `DaoError::VoterNotRegistered` if the voter is not registered
-            // - Success: Create a SuperDao proposal to execute a cross-chain message.
+            let caller = self.env().caller();
+            
+            // Check if caller is registered voter
+            if !self.has_voter(caller) {
+                return Err(DaoError::VoterNotRegistered);
+            }
+
+            // Create cross-chain proposal
+            let dest = MultiLocation::new(1, X1(Parachain(1000)));
+            let message = xcm::VersionedXcm::V3(Xcm(vec![
+                WithdrawAsset(MultiAssets::new()),
+                BuyExecution {
+                    fees: MultiAsset { id: Concrete(MultiLocation::here()), fun: Fungible(1000000000) },
+                    weight_limit: Limited(Weight::from_parts(1000000000, 1000000000)),
+                },
+            ]));
+
+            let call = Call::Chain(ChainCall {
+                dest,
+                message,
+            });
+
+            self.superdao.create_proposal(call);
             Ok(())
         }
 
         #[ink(message)]
         pub fn create_contract_call_proposal(&mut self) -> Result<(), DaoError> {
-            // - Error: Throw error `DaoError::VoterNotRegistered` if the voter is not registered
-            // - Success: Create a SuperDao proposal to call a contract method.
+            let caller = self.env().caller();
+            
+            // Check if caller is registered voter
+            if !self.has_voter(caller) {
+                return Err(DaoError::VoterNotRegistered);
+            }
+
+            // Create contract call proposal
+            let contract_call = ContractCall {
+                dest: caller, // Example destination
+                selector: [0; 4], // Example selector
+                input: vec![], // Example input
+                transfer: 0, // Example transfer amount
+                gas_limit: 0, // Example gas limit
+            };
+
+            let call = Call::Contract(contract_call);
+            self.superdao.create_proposal(call);
             Ok(())
         }
 
         #[ink(message)]
         pub fn vote_proposal(&mut self, proposal_id: u32, vote: bool) -> Result<(), DaoError> {
-            // - Error: Throw error `DaoError::VoterNotRegistered` if the voter is not registered
-            // - Success: Vote a SuperDao proposal.
+            let caller = self.env().caller();
+            
+            // Check if caller is registered voter
+            if !self.has_voter(caller) {
+                return Err(DaoError::VoterNotRegistered);
+            }
+
+            // Cast vote on proposal
+            let vote = if vote { Vote::Yes } else { Vote::No };
+            self.superdao.vote_proposal(proposal_id, vote);
             Ok(())
         }
     }

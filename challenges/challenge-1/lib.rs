@@ -19,39 +19,55 @@ mod dao {
 
     #[ink(storage)]
     pub struct Dao {
-        value: bool,
+        name: String,
     }
 
     impl Dao {
         // Constructor that initializes the values for the contract.
         #[ink(constructor)]
-        pub fn new(init_value: bool) -> Self {
-            Self { value: init_value }
+        pub fn new(name: String) -> Self {
+            Self { name }
         }
 
         // Constructor that initializes the default values for the contract.
         #[ink(constructor)]
         pub fn default() -> Self {
-            Self::new(Default::default())
+            Self::new(String::from("Default DAO"))
         }
 
         #[ink(message)]
         pub fn get_name(&self) -> String {
-            // - Returns the name of the Dao
-            todo!();
+            self.name.clone()
         }
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::dao::Dao;
 
         #[ink::test]
         fn test_name() {
-            let dao = Dao::new(String::from("any name"));
-            assert_eq!(dao.name, dao.get_name());
-            assert_eq!(dao.get_name(), String::from("any name"));
+            let dao = Dao::new(String::from("Test DAO"));
+            assert_eq!(dao.get_name(), String::from("Test DAO"));
+        }
+
+        #[ink::test]
+        fn test_default() {
+            let dao = Dao::default();
+            assert_eq!(dao.get_name(), String::from("Default DAO"));
+        }
+
+        #[ink::test]
+        fn test_empty_name() {
+            let dao = Dao::new(String::from(""));
+            assert_eq!(dao.get_name(), String::from(""));
+        }
+
+        #[ink::test]
+        fn test_long_name() {
+            let long_name = "Very Long DAO Name That Should Still Work".to_string();
+            let dao = Dao::new(long_name.clone());
+            assert_eq!(dao.get_name(), long_name);
         }
     }
 }
